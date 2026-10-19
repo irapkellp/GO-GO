@@ -17,6 +17,7 @@ const APP_NAME = 'GO&GO';
 const CURRENCY = 'GOC';
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'gogo.db');
+const DB_PATH = process.env.DB_PATH || '/tmp/gogo.db';
 
 if (!process.env.SESSION_SECRET ||
     process.env.SESSION_SECRET.length < 32) {
@@ -25,8 +26,18 @@ if (!process.env.SESSION_SECRET ||
     );
 }
 
-const db = new DatabaseSync(DB_PATH);
+let db;
 
+try {
+    db = new DatabaseSync(DB_PATH);
+    console.log('GO&GO database opened successfully.');
+    console.log('Database location:', DB_PATH);
+} catch (error) {
+    console.error('GO&GO database could not be opened.');
+    console.error('Database location:', DB_PATH);
+    console.error('Database error:', error.message);
+    process.exit(1);
+}
 db.exec(`
     PRAGMA foreign_keys = ON;
 
