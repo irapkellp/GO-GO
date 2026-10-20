@@ -7,7 +7,56 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, UPLOAD_DIR);
+    },
+
+    filename: (req, file, cb) => {
+        const extension = path.extname(file.originalname).toLowerCase();
+        cb(null, crypto.randomBytes(16).toString('hex') + extension);
+    }
+});
+
+const mediaUpload = multer({
+    storage,
+    limits: {
+        fileSize: 20 * 1024 * 1024
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'audio/mpeg',
+            'audio/mp4',
+            'audio/wav',
+            'audio/ogg',
+            'audio/aac'
+        ];
+
+        if (!allowedTypes.includes(file.mimetype)) {
+            return cb(new Error('Ubwoko bwa file ntiyemewe.'));
+        }
+
+        cb(null, true);
+    }
+});
+
+app.use('/uploads', express.static(UPLOAD_DIR));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -69,6 +118,25 @@ db.exec(`
         video_url TEXT NOT NULL,
         likes INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+            CREATE TABLE IF NOT EXISTS referrals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        referrer_id INTEGER NOT NULL,
+        referred_id INTEGER NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (referrer_id) REFERENCES users(id),
+        FOREIGN KEY (referred_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        post_type TEXT NOT NULL
+            CHECK (post_type IN ('story', 'text', 'audio', 'photo')),
+        text_content TEXT,
+        media_path TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id)
     );
 
@@ -205,6 +273,22 @@ const q = {
         SELECT COUNT(*) AS total
         FROM follows WHERE follower_id = ?
     `),
+        posts: db.prepare(`
+        SELECT posts.*, users.username
+        FROM posts
+        JOIN users ON users.id = posts.user_id
+        WHERE posts.post_type != 'story'
+           OR posts.expires_at IS NULL
+           OR posts.expires_at > CURRENT_TIMESTAMP
+        ORDER BY posts.id DESC
+        LIMIT 100
+    `),
+
+    createPost: db.prepare(`
+        INSERT INTO posts
+        (user_id, post_type, text_content, media_path, expires_at)
+        VALUES (?, ?, ?, ?, ?)
+    `),
 
     transactions: db.prepare(`
         SELECT * FROM transactions
@@ -236,6 +320,7 @@ function newReferralCode() {
 function resToken(req) {
     return req.session.formToken || '';
 }
+
 /* EXPRESS CONFIGURATION */
 
 app.disable('x-powered-by');
@@ -266,7 +351,6 @@ app.use(session({
 }));
 
 /* FORM TOKEN */
-/* FORM TOKEN */
 
 app.use((req, res, next) => {
     if (!req.session.formToken) {
@@ -294,10 +378,7 @@ function checkToken(req, res, next) {
     const tokenBuffer = Buffer.from(token);
     const expectedBuffer = Buffer.from(expected);
 
-    if (
-        tokenBuffer.length !== expectedBuffer.length ||
-        !crypto.timingSafeEqual(tokenBuffer, expectedBuffer)
-    ) {
+    if (!crypto.timingSafeEqual(tokenBuffer, expectedBuffer)) {
         return res.status(403).send(
             'Request ntiyemewe. Ongera ugerageze.'
         );
@@ -305,6 +386,8 @@ function checkToken(req, res, next) {
 
     next();
 }
+
+function requireLogin(req, res, next) {
     if (!req.session.userId) {
         return res.redirect('/login');
     }
@@ -328,7 +411,20 @@ function requireAdmin(req, res, next) {
     }
 
     next();
-}
+    }
+/* FORM TOKEN */
+/* FORM TOKEN */
+
+app.use((req, res, next) => {
+    if (!req.session.formToken) {
+        req.session.formToken = crypto.randomBytes(32).toString('hex');
+    }
+
+    res.locals.formToken = req.session.formToken;
+    next();
+});
+
+
 
 /* HTML PAGE TEMPLATE */
 
