@@ -424,8 +424,6 @@ app.use((req, res, next) => {
     next();
 });
 
-
-
 /* HTML PAGE TEMPLATE */
 
 function page(title, content, req) {
