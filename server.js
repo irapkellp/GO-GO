@@ -236,10 +236,11 @@ function newReferralCode() {
 function resToken(req) {
     return req.session.formToken || '';
 }
-
 /* EXPRESS CONFIGURATION */
 
 app.disable('x-powered-by');
+
+app.set('trust proxy', 1);
 
 app.use(express.urlencoded({
     extended: false,
@@ -255,6 +256,7 @@ app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    proxy: true,
     cookie: {
         httpOnly: true,
         sameSite: 'lax',
