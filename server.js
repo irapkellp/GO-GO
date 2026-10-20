@@ -7,68 +7,12 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
 
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, UPLOAD_DIR);
-    },
-
-    filename: (req, file, cb) => {
-        const extension = path.extname(file.originalname).toLowerCase();
-        cb(null, crypto.randomBytes(16).toString('hex') + extension);
-    }
-});
-
-const mediaUpload = multer({
-    storage,
-    limits: {
-        fileSize: 20 * 1024 * 1024
-    },
-    fileFilter: (req, file, cb) => {
-        const allowedTypes = [
-            'image/jpeg',
-            'image/png',
-            'image/webp',
-            'audio/mpeg',
-            'audio/mp4',
-            'audio/wav',
-            'audio/ogg',
-            'audio/aac'
-        ];
-
-        if (!allowedTypes.includes(file.mimetype)) {
-            return cb(new Error('Ubwoko bwa file ntiyemewe.'));
-        }
-
-        cb(null, true);
-    }
-});
-
-app.use('/uploads', express.static(UPLOAD_DIR));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const APP_NAME = 'GO&GO';
 const CURRENCY = 'GOC';
-
-/*
- * DATABASE
- * /tmp iraboneka kuri Render, ariko amakuru ashobora
- * kubura igihe service yongeye gutangira.
- * Tuzakenera database ibika amakuru burundu.
- */
 const DB_PATH = '/tmp/gogo.db';
 
 if (
@@ -88,8 +32,7 @@ try {
     console.log('Database location:', DB_PATH);
 } catch (error) {
     console.error('GO&GO database could not be opened.');
-    console.error('Database location:', DB_PATH);
-    console.error('Database error:', error.message);
+    console.error(error.message);
     process.exit(1);
 }
 
@@ -118,25 +61,6 @@ db.exec(`
         video_url TEXT NOT NULL,
         likes INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-            CREATE TABLE IF NOT EXISTS referrals (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        referrer_id INTEGER NOT NULL,
-        referred_id INTEGER NOT NULL UNIQUE,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (referrer_id) REFERENCES users(id),
-        FOREIGN KEY (referred_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        post_type TEXT NOT NULL
-            CHECK (post_type IN ('story', 'text', 'audio', 'photo')),
-        text_content TEXT,
-        media_path TEXT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        expires_at TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id)
     );
 
@@ -273,22 +197,6 @@ const q = {
         SELECT COUNT(*) AS total
         FROM follows WHERE follower_id = ?
     `),
-        posts: db.prepare(`
-        SELECT posts.*, users.username
-        FROM posts
-        JOIN users ON users.id = posts.user_id
-        WHERE posts.post_type != 'story'
-           OR posts.expires_at IS NULL
-           OR posts.expires_at > CURRENT_TIMESTAMP
-        ORDER BY posts.id DESC
-        LIMIT 100
-    `),
-
-    createPost: db.prepare(`
-        INSERT INTO posts
-        (user_id, post_type, text_content, media_path, expires_at)
-        VALUES (?, ?, ?, ?, ?)
-    `),
 
     transactions: db.prepare(`
         SELECT * FROM transactions
@@ -324,7 +232,6 @@ function resToken(req) {
 /* EXPRESS CONFIGURATION */
 
 app.disable('x-powered-by');
-
 app.set('trust proxy', 1);
 
 app.use(express.urlencoded({
@@ -354,7 +261,8 @@ app.use(session({
 
 app.use((req, res, next) => {
     if (!req.session.formToken) {
-        req.session.formToken = crypto.randomBytes(32).toString('hex');
+        req.session.formToken =
+            crypto.randomBytes(32).toString('hex');
     }
 
     res.locals.formToken = req.session.formToken;
@@ -378,7 +286,10 @@ function checkToken(req, res, next) {
     const tokenBuffer = Buffer.from(token);
     const expectedBuffer = Buffer.from(expected);
 
-    if (!crypto.timingSafeEqual(tokenBuffer, expectedBuffer)) {
+    if (
+        tokenBuffer.length !== expectedBuffer.length ||
+        !crypto.timingSafeEqual(tokenBuffer, expectedBuffer)
+    ) {
         return res.status(403).send(
             'Request ntiyemewe. Ongera ugerageze.'
         );
@@ -386,6 +297,8 @@ function checkToken(req, res, next) {
 
     next();
 }
+
+/* LOGIN MIDDLEWARE */
 
 function requireLogin(req, res, next) {
     if (!req.session.userId) {
@@ -411,18 +324,7 @@ function requireAdmin(req, res, next) {
     }
 
     next();
-    }
-/* FORM TOKEN */
-/* FORM TOKEN */
-
-app.use((req, res, next) => {
-    if (!req.session.formToken) {
-        req.session.formToken = crypto.randomBytes(32).toString('hex');
-    }
-
-    res.locals.formToken = req.session.formToken;
-    next();
-});
+}
 
 /* HTML PAGE TEMPLATE */
 
@@ -460,6 +362,7 @@ function page(title, content, req) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} | GO&GO</title>
+
 <style>
 :root {
     --green: #138b43;
@@ -468,21 +371,34 @@ function page(title, content, req) {
     --bg: #f5f8f4;
     --text: #17231b;
 }
-* { box-sizing: border-box; }
+
+* {
+    box-sizing: border-box;
+}
+
 body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
     font-family: Arial, sans-serif;
 }
+
 header {
     background: var(--green);
     color: white;
     padding: 18px 5%;
     border-bottom: 5px solid var(--yellow);
 }
-.brand { font-size: 29px; font-weight: 900; }
-.brand span { color: var(--yellow); }
+
+.brand {
+    font-size: 29px;
+    font-weight: 900;
+}
+
+.brand span {
+    color: var(--yellow);
+}
+
 nav {
     display: flex;
     flex-wrap: wrap;
@@ -492,23 +408,32 @@ nav {
     background: white;
     border-bottom: 1px solid #ddd;
 }
-nav a, .navbtn {
+
+nav a,
+.navbtn {
     color: var(--darkgreen);
     font-weight: bold;
     text-decoration: none;
 }
-.inline { display: inline; margin: 0; }
+
+.inline {
+    display: inline;
+    margin: 0;
+}
+
 .navbtn {
     border: 0;
     background: transparent;
     cursor: pointer;
     font-size: 15px;
 }
+
 main {
     max-width: 900px;
     margin: 25px auto;
     padding: 0 15px;
 }
+
 .card {
     background: white;
     border-radius: 14px;
@@ -516,20 +441,57 @@ main {
     margin-bottom: 18px;
     box-shadow: 0 2px 9px #0000000c;
 }
-h1, h2 { color: var(--darkgreen); }
+
+/* SHARE BUTTON KU RUHANDE RWA POST */
+
+.post-card {
+    position: relative;
+    padding-right: 64px;
+}
+
+.share-icon {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--yellow);
+    color: #17231b;
+    font-size: 23px;
+    line-height: 42px;
+    text-align: center;
+    box-shadow: 0 2px 6px #00000020;
+}
+
+.share-icon:hover {
+    background: #f2cb17;
+    color: #17231b;
+}
+
+h1,
+h2 {
+    color: var(--darkgreen);
+}
+
 label {
     display: block;
     margin: 12px 0 5px;
     font-weight: bold;
 }
-input, textarea {
+
+input,
+textarea {
     width: 100%;
     padding: 12px;
     border: 1px solid #cbd5cc;
     border-radius: 8px;
     font-size: 16px;
 }
-button, .button {
+
+button,
+.button {
     display: inline-block;
     padding: 11px 17px;
     background: var(--green);
@@ -540,25 +502,41 @@ button, .button {
     text-decoration: none;
     font-weight: bold;
 }
-button:hover, .button:hover { background: var(--darkgreen); }
-.yellow { background: var(--yellow); color: #17231b; }
-.muted { color: #66736a; font-size: 14px; }
+
+button:hover,
+.button:hover {
+    background: var(--darkgreen);
+}
+
+.yellow {
+    background: var(--yellow);
+    color: #17231b;
+}
+
+.muted {
+    color: #66736a;
+    font-size: 14px;
+}
+
 video {
     width: 100%;
     max-height: 520px;
     background: #111;
     border-radius: 10px;
 }
+
 .balance {
     font-size: 30px;
     font-weight: bold;
     color: var(--green);
 }
+
 footer {
     text-align: center;
     padding: 25px;
     color: #68746b;
 }
+
 .stat {
     display: inline-block;
     padding: 12px;
@@ -566,22 +544,77 @@ footer {
     background: #f0f7ee;
     border-radius: 9px;
 }
-table { width: 100%; border-collapse: collapse; }
-th, td {
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
     padding: 9px;
     text-align: left;
     border-bottom: 1px solid #ddd;
 }
 </style>
 </head>
+
 <body>
 <header>
     <div class="brand">GO<span>&</span>GO</div>
     <div>Connect • Create • Discover</div>
 </header>
+
 ${nav}
+
 <main>${content}</main>
-<footer>© ${new Date().getFullYear()} GO&GO — Connect the world.</footer>
+
+<footer>
+    © ${new Date().getFullYear()} GO&GO — Connect the world.
+</footer>
+
+<script>
+async function shareVideo(button) {
+    const path = button.dataset.path;
+    const title =
+        button.dataset.title || 'Reba iyi video kuri GO&GO';
+
+    const url = new URL(
+        path,
+        window.location.origin
+    ).href;
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'GO&GO',
+                text: title,
+                url: url
+            });
+
+            return;
+        } catch (error) {
+            if (error && error.name === 'AbortError') {
+                return;
+            }
+        }
+    }
+
+    try {
+        await navigator.clipboard.writeText(url);
+
+        alert(
+            'Link yakoporowe neza! Ushobora kuyisangiza inshuti.'
+        );
+    } catch (error) {
+        window.prompt(
+            'Koporora link ya video:',
+            url
+        );
+    }
+}
+</script>
+
 </body>
 </html>`;
 }
@@ -600,41 +633,99 @@ app.get('/', (req, res) => {
     const videos = q.videos.all();
 
     const feed = videos.map(video => `
-        <article class="card">
+        <article class="card post-card">
+
+            <button
+                type="button"
+                class="share-icon"
+                aria-label="Share this video"
+                title="Share"
+                data-path="/videos/${video.id}"
+                data-title="${escapeHtml(video.title)}"
+                onclick="shareVideo(this)">↗</button>
+
             <h3>${escapeHtml(video.title)}</h3>
+
             <p class="muted">
-                By <a href="/u/${encodeURIComponent(video.username)}">
-                @${escapeHtml(video.username)}</a>
+                By
+                <a href="/u/${encodeURIComponent(video.username)}">
+                    @${escapeHtml(video.username)}
+                </a>
             </p>
-            <video controls preload="metadata"
-                src="${escapeHtml(video.video_url)}"></video>
+
+            <video
+                controls
+                preload="metadata"
+                src="${escapeHtml(video.video_url)}">
+            </video>
+
             <p>❤️ ${video.likes} likes</p>
+
             ${user ? `
-                <form method="post" action="/videos/${video.id}/like">
+                <form method="post"
+                    action="/videos/${video.id}/like">
+
                     <input type="hidden" name="_token"
                         value="${escapeHtml(resToken(req))}">
-                    <button type="submit" class="yellow">Like / Unlike</button>
+
+                    <button type="submit" class="yellow">
+                        Like / Unlike
+                    </button>
                 </form>
-                <p><a href="/videos/${video.id}">View comments</a></p>
-            ` : '<a href="/login">Login to like and comment</a>'}
+
+                <p>
+                    <a href="/videos/${video.id}">
+                        View comments
+                    </a>
+                </p>
+            ` : `
+                <a href="/login">
+                    Login to like and comment
+                </a>
+            `}
         </article>
     `).join('');
 
     const content = `
         <section class="card">
             <h1>Welcome to GO&GO 💚💛</h1>
-            <p>A place to share videos, meet people and discover creators.</p>
+
+            <p>
+                A place to share videos, meet people and discover creators.
+            </p>
+
             ${user ? `
-                <p>Murakaza neza, <b>@${escapeHtml(user.username)}</b>!</p>
-                <p class="balance">${Number(user.balance).toFixed(2)} ${CURRENCY}</p>
-                <a class="button" href="/upload">Share a video</a>
+                <p>
+                    Murakaza neza,
+                    <b>@${escapeHtml(user.username)}</b>!
+                </p>
+
+                <p class="balance">
+                    ${Number(user.balance).toFixed(2)} ${CURRENCY}
+                </p>
+
+                <a class="button" href="/upload">
+                    Share a video
+                </a>
             ` : `
-                <a class="button" href="/register">Join GO&GO</a>
-                <a class="button yellow" href="/login">Login</a>
+                <a class="button" href="/register">
+                    Join GO&GO
+                </a>
+
+                <a class="button yellow" href="/login">
+                    Login
+                </a>
             `}
         </section>
+
         <h2>Video Feed</h2>
-        ${feed || '<div class="card">Nta video irashyirwaho. Ba uwa mbere uyishyireho!</div>'}
+
+        ${feed || `
+            <div class="card">
+                Nta video irashyirwaho.
+                Ba uwa mbere uyishyireho!
+            </div>
+        `}
     `;
 
     renderPage(res, 'Home', content, req);
@@ -646,21 +737,43 @@ app.get('/register', (req, res) => {
     const content = `
         <section class="card">
             <h1>Create account</h1>
+
             <form method="post" action="/register">
                 <input type="hidden" name="_token"
                     value="${escapeHtml(resToken(req))}">
+
                 <label>Username</label>
-                <input name="username" required minlength="3" maxlength="24"
-                    pattern="[A-Za-z0-9_]+" autocomplete="username">
+                <input
+                    name="username"
+                    required
+                    minlength="3"
+                    maxlength="24"
+                    pattern="[A-Za-z0-9_]+"
+                    autocomplete="username">
+
                 <label>Email</label>
-                <input type="email" name="email" required maxlength="254"
+                <input
+                    type="email"
+                    name="email"
+                    required
+                    maxlength="254"
                     autocomplete="email">
+
                 <label>Password</label>
-                <input type="password" name="password" required minlength="10"
+                <input
+                    type="password"
+                    name="password"
+                    required
+                    minlength="10"
                     autocomplete="new-password">
+
                 <label>Referral code (optional)</label>
                 <input name="referral" maxlength="30">
-                <p class="muted">Koresha password ikomeye kandi ntuyisangize abandi.</p>
+
+                <p class="muted">
+                    Koresha password ikomeye kandi ntuyisangize abandi.
+                </p>
+
                 <button type="submit">Create account</button>
             </form>
         </section>
@@ -675,7 +788,9 @@ app.post('/register', checkToken, async (req, res) => {
     const username = String(req.body.username || '').trim();
     const email = String(req.body.email || '').trim().toLowerCase();
     const password = String(req.body.password || '');
-    const referral = String(req.body.referral || '').trim().toUpperCase();
+    const referral = String(req.body.referral || '')
+        .trim()
+        .toUpperCase();
 
     if (!validUsername(username)) {
         return res.status(400).send(
@@ -696,7 +811,10 @@ app.post('/register', checkToken, async (req, res) => {
         );
     }
 
-    if (q.userByEmail.get(email) || q.userByUsername.get(username)) {
+    if (
+        q.userByEmail.get(email) ||
+        q.userByUsername.get(username)
+    ) {
         return res.status(409).send(
             'Email cyangwa username isanzwe ikoreshwa.'
         );
@@ -758,15 +876,25 @@ app.get('/login', (req, res) => {
     const content = `
         <section class="card">
             <h1>Login to GO&GO</h1>
+
             <form method="post" action="/login">
                 <input type="hidden" name="_token"
                     value="${escapeHtml(resToken(req))}">
+
                 <label>Email</label>
-                <input type="email" name="email" required
+                <input
+                    type="email"
+                    name="email"
+                    required
                     autocomplete="email">
+
                 <label>Password</label>
-                <input type="password" name="password" required
+                <input
+                    type="password"
+                    name="password"
+                    required
                     autocomplete="current-password">
+
                 <button type="submit">Login</button>
             </form>
         </section>
@@ -778,7 +906,10 @@ app.get('/login', (req, res) => {
 /* LOGIN */
 
 app.post('/login', checkToken, async (req, res) => {
-    const email = String(req.body.email || '').trim().toLowerCase();
+    const email = String(req.body.email || '')
+        .trim()
+        .toLowerCase();
+
     const password = String(req.body.password || '');
 
     const user = q.userByEmail.get(email);
@@ -819,19 +950,28 @@ app.get('/upload', requireLogin, (req, res) => {
     const content = `
         <section class="card">
             <h1>Share a video</h1>
+
             <p>
                 Shyiramo URL ya video iri kuri hosting yizewe.
                 Video igomba kuba iyawe cyangwa ufite uburenganzira
                 bwo kuyisangiza abandi.
             </p>
+
             <form method="post" action="/upload">
                 <input type="hidden" name="_token"
                     value="${escapeHtml(resToken(req))}">
+
                 <label>Video title</label>
                 <input name="title" maxlength="120" required>
+
                 <label>Video URL (HTTPS)</label>
-                <input name="video_url" type="url" required maxlength="1000"
+                <input
+                    name="video_url"
+                    type="url"
+                    required
+                    maxlength="1000"
                     placeholder="https://example.com/video.mp4">
+
                 <button type="submit">Publish video</button>
             </form>
         </section>
@@ -905,25 +1045,50 @@ app.get('/videos/:id', (req, res) => {
     const form = req.session.userId ? `
         <section class="card">
             <h3>Add a comment</h3>
+
             <form method="post" action="/videos/${id}/comment">
                 <input type="hidden" name="_token"
                     value="${escapeHtml(resToken(req))}">
-                <textarea name="comment" maxlength="1000" required></textarea>
+
+                <textarea
+                    name="comment"
+                    maxlength="1000"
+                    required></textarea>
+
                 <button type="submit">Comment</button>
             </form>
         </section>
     ` : '<p><a href="/login">Login to comment</a></p>';
 
     const content = `
-        <article class="card">
+        <article class="card post-card">
+
+            <button
+                type="button"
+                class="share-icon"
+                aria-label="Share this video"
+                title="Share"
+                data-path="/videos/${video.id}"
+                data-title="${escapeHtml(video.title)}"
+                onclick="shareVideo(this)">↗</button>
+
             <h1>${escapeHtml(video.title)}</h1>
+
             <p>By @${escapeHtml(video.username)}</p>
-            <video controls preload="metadata"
-                src="${escapeHtml(video.video_url)}"></video>
+
+            <video
+                controls
+                preload="metadata"
+                src="${escapeHtml(video.video_url)}">
+            </video>
+
             <p>❤️ ${video.likes} likes</p>
         </article>
+
         ${form}
+
         <h2>Comments</h2>
+
         ${commentHtml || '<p>No comments yet.</p>'}
     `;
 
@@ -950,6 +1115,7 @@ app.post('/videos/:id/like', requireLogin, checkToken, (req, res) => {
     }
 
     q.updateLikes.run(videoId, videoId);
+
     res.redirect('/');
 });
 
@@ -972,7 +1138,9 @@ app.post(
         }
 
         if (!comment || comment.length > 1000) {
-            return res.status(400).send('Comment ntabwo yemewe.');
+            return res.status(400).send(
+                'Comment ntabwo yemewe.'
+            );
         }
 
         db.prepare(`
@@ -987,7 +1155,10 @@ app.post(
 /* SEARCH USERS */
 
 app.get('/search', (req, res) => {
-    const search = String(req.query.q || '').trim().slice(0, 40);
+    const search = String(req.query.q || '')
+        .trim()
+        .slice(0, 40);
+
     let results = [];
 
     if (search) {
@@ -1013,12 +1184,17 @@ app.get('/search', (req, res) => {
     const content = `
         <section class="card">
             <h1>Find people</h1>
+
             <form method="get" action="/search">
-                <input name="q" value="${escapeHtml(search)}"
+                <input
+                    name="q"
+                    value="${escapeHtml(search)}"
                     placeholder="Search username">
+
                 <button type="submit">Search</button>
             </form>
         </section>
+
         ${rows || (search ? '<p>No users found.</p>' : '')}
     `;
 
@@ -1049,8 +1225,10 @@ app.get('/u/:username', (req, res) => {
     const followForm = req.session.userId && !isSelf ? `
         <form method="post"
             action="/u/${encodeURIComponent(user.username)}/follow">
+
             <input type="hidden" name="_token"
                 value="${escapeHtml(resToken(req))}">
+
             <button class="yellow">
                 ${isFollowing ? 'Unfollow' : 'Follow'}
             </button>
@@ -1066,9 +1244,15 @@ app.get('/u/:username', (req, res) => {
     const videoHtml = videos.map(v => `
         <div class="card">
             <h3>${escapeHtml(v.title)}</h3>
-            <video controls preload="metadata"
-                src="${escapeHtml(v.video_url)}"></video>
+
+            <video
+                controls
+                preload="metadata"
+                src="${escapeHtml(v.video_url)}">
+            </video>
+
             <p>❤️ ${v.likes}</p>
+
             <a href="/videos/${v.id}">Comments</a>
         </div>
     `).join('');
@@ -1076,11 +1260,17 @@ app.get('/u/:username', (req, res) => {
     const content = `
         <section class="card">
             <h1>@${escapeHtml(user.username)}</h1>
+
             <div class="stat">Followers: ${followers}</div>
-            <div class="stat">Following: ${following}</div>
+            <div class="stat">Following: ${following}
+
+            </div>
+
             ${followForm}
         </section>
+
         <h2>Videos</h2>
+
         ${videoHtml || '<p>This creator has not posted videos yet.</p>'}
     `;
 
@@ -1140,20 +1330,25 @@ app.get('/wallet', requireLogin, (req, res) => {
     const content = `
         <section class="card">
             <h1>GO CASH Wallet</h1>
+
             <p class="balance">
                 ${Number(req.user.balance).toFixed(2)} ${CURRENCY}
             </p>
+
             <p>
                 GOC ni amafaranga yo muri platform y'igerageza.
                 Ntabwo ari amafaranga nyayo kugeza igihe uburyo
                 bwo kuyishyura bwemejwe.
             </p>
+
             <p class="muted">
                 Kubikuza ntibirafungurwa muri iyi version.
             </p>
         </section>
+
         <section class="card">
             <h2>Transaction history</h2>
+
             <div style="overflow-x:auto">
                 <table>
                     <tr>
@@ -1162,6 +1357,7 @@ app.get('/wallet', requireLogin, (req, res) => {
                         <th>Description</th>
                         <th>Date</th>
                     </tr>
+
                     ${rows}
                 </table>
             </div>
@@ -1192,17 +1388,23 @@ app.get('/referrals', requireLogin, (req, res) => {
     const content = `
         <section class="card">
             <h1>Invite friends</h1>
+
             <p>Your referral code:</p>
+
             <h2>${escapeHtml(req.user.referral_code)}</h2>
+
             <p>
                 Abantu biyandikisha bakoresheje iyi code
                 bazagaragara mu mateka ya referrals yawe.
             </p>
+
             <p class="muted">
                 Nta reward y'amafaranga ihita itangwa muri iyi version.
             </p>
         </section>
+
         <h2>Your referrals</h2>
+
         ${rows || '<p>You have no referrals yet.</p>'}
     `;
 
@@ -1227,9 +1429,11 @@ app.get('/admin', requireLogin, requireAdmin, (req, res) => {
     const content = `
         <section class="card">
             <h1>GO&GO Admin Dashboard</h1>
+
             <div class="stat">Users: ${userCount}</div>
             <div class="stat">Videos: ${videoCount}</div>
             <div class="stat">Comments: ${commentCount}</div>
+
             <p>
                 Admin dashboard y'ibanze. Ibikorwa byo guhindura
                 balances, kwemeza withdrawals no gucunga adverts
