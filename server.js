@@ -266,11 +266,11 @@ app.use(session({
 }));
 
 /* FORM TOKEN */
+/* FORM TOKEN */
 
 app.use((req, res, next) => {
     if (!req.session.formToken) {
-        req.session.formToken =
-            crypto.randomBytes(24).toString('hex');
+        req.session.formToken = crypto.randomBytes(32).toString('hex');
     }
 
     res.locals.formToken = req.session.formToken;
@@ -305,10 +305,6 @@ function checkToken(req, res, next) {
 
     next();
 }
-
-/* AUTHENTICATION */
-
-function requireLogin(req, res, next) {
     if (!req.session.userId) {
         return res.redirect('/login');
     }
