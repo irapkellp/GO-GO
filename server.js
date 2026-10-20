@@ -13,6 +13,14 @@ const PORT = process.env.PORT || 3000;
 
 const APP_NAME = 'GO&GO';
 const CURRENCY = 'GOC';
+
+/*
+ * DATABASE
+ * Icyitonderwa: /tmp kuri Render ishobora gutuma
+ * amakuru abura service yongeye gutangira.
+ * Koresha persistent disk cyangwa database ibika
+ * amakuru burundu mbere yo gukoresha urubuga live.
+ */
 const DB_PATH = '/tmp/gogo.db';
 
 if (
@@ -32,7 +40,8 @@ try {
     console.log('Database location:', DB_PATH);
 } catch (error) {
     console.error('GO&GO database could not be opened.');
-    console.error(error.message);
+    console.error('Database location:', DB_PATH);
+    console.error('Database error:', error.message);
     process.exit(1);
 }
 
@@ -232,6 +241,7 @@ function resToken(req) {
 /* EXPRESS CONFIGURATION */
 
 app.disable('x-powered-by');
+
 app.set('trust proxy', 1);
 
 app.use(express.urlencoded({
@@ -251,18 +261,16 @@ app.use(session({
     proxy: true,
     cookie: {
         httpOnly: true,
-        sameSite: 'lax',
         secure: process.env.NODE_ENV === 'production',
-        maxAge: 7 * 24 * 60 * 60 * 1000
+        sameSite: 'lax',
+        maxAge: 1000 * 60 * 60 * 24 * 7
     }
 }));
-
 /* FORM TOKEN */
 
 app.use((req, res, next) => {
     if (!req.session.formToken) {
-        req.session.formToken =
-            crypto.randomBytes(32).toString('hex');
+        req.session.formToken = crypto.randomBytes(32).toString('hex');
     }
 
     res.locals.formToken = req.session.formToken;
@@ -298,7 +306,7 @@ function checkToken(req, res, next) {
     next();
 }
 
-/* LOGIN MIDDLEWARE */
+/* REQUIRE LOGIN — IKOSA RYAKOSOWE */
 
 function requireLogin(req, res, next) {
     if (!req.session.userId) {
@@ -315,6 +323,8 @@ function requireLogin(req, res, next) {
     req.user = user;
     next();
 }
+
+/* REQUIRE ADMIN */
 
 function requireAdmin(req, res, next) {
     if (!req.user || req.user.is_admin !== 1) {
@@ -356,1144 +366,853 @@ function page(title, content, req) {
         </nav>
     `;
 
-    return `<!DOCTYPE html>
+    return `
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)} | GO&GO</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(title)} | GO&GO</title>
+    <style>
+        :root {
+            --green: #087f23;
+            --yellow: #ffdf00;
+            --white: #ffffff;
+            --background: #f5f7f3;
+            --text: #202820;
+        }
 
-<style>
-:root {
-    --green: #138b43;
-    --darkgreen: #08632c;
-    --yellow: #ffdf36;
-    --bg: #f5f8f4;
-    --text: #17231b;
-}
+        * {
+            box-sizing: border-box;
+        }
 
-* {
-    box-sizing: border-box;
-}
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--background);
+            color: var(--text);
+        }
 
-body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: Arial, sans-serif;
-}
+        header {
+            background: var(--green);
+            color: white;
+            padding: 16px;
+        }
 
-header {
-    background: var(--green);
-    color: white;
-    padding: 18px 5%;
-    border-bottom: 5px solid var(--yellow);
-}
+        .brand {
+            font-size: 26px;
+            font-weight: bold;
+        }
 
-.brand {
-    font-size: 29px;
-    font-weight: 900;
-}
+        .brand span {
+            color: var(--yellow);
+        }
 
-.brand span {
-    color: var(--yellow);
-}
+        nav {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: white;
+            border-bottom: 2px solid var(--yellow);
+        }
 
-nav {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 5%;
-    background: white;
-    border-bottom: 1px solid #ddd;
-}
+        nav a {
+            color: var(--green);
+            text-decoration: none;
+            font-weight: bold;
+        }
 
-nav a,
-.navbtn {
-    color: var(--darkgreen);
-    font-weight: bold;
-    text-decoration: none;
-}
+        main {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 0 12px;
+        }
 
-.inline {
-    display: inline;
-    margin: 0;
-}
+        .card {
+            background: white;
+            padding: 18px;
+            margin-bottom: 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px #00000012;
+        }
 
-.navbtn {
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-    font-size: 15px;
-}
+        input, textarea, button {
+            font: inherit;
+            padding: 10px;
+            margin: 5px 0;
+            max-width: 100%;
+        }
 
-main {
-    max-width: 900px;
-    margin: 25px auto;
-    padding: 0 15px;
-}
+        input, textarea {
+            width: 100%;
+            border: 1px solid #cccccc;
+            border-radius: 6px;
+        }
 
-.card {
-    background: white;
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 18px;
-    box-shadow: 0 2px 9px #0000000c;
-}
+        button, .button {
+            background: var(--green);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 10px 14px;
+            text-decoration: none;
+        }
 
-/* SHARE BUTTON KU RUHANDE RWA POST */
+        .inline {
+            display: inline;
+        }
 
-.post-card {
-    position: relative;
-    padding-right: 64px;
-}
+        .navbtn {
+            background: var(--green);
+        }
 
-.share-icon {
-    position: absolute;
-    top: 14px;
-    right: 14px;
-    width: 42px;
-    height: 42px;
-    padding: 0;
-    border-radius: 50%;
-    background: var(--yellow);
-    color: #17231b;
-    font-size: 23px;
-    line-height: 42px;
-    text-align: center;
-    box-shadow: 0 2px 6px #00000020;
-}
+        .yellow {
+            background: var(--yellow);
+            color: #202820;
+        }
 
-.share-icon:hover {
-    background: #f2cb17;
-    color: #17231b;
-}
+        .muted {
+            color: #666666;
+            font-size: 14px;
+        }
 
-h1,
-h2 {
-    color: var(--darkgreen);
-}
+        .video-card {
+            position: relative;
+        }
 
-label {
-    display: block;
-    margin: 12px 0 5px;
-    font-weight: bold;
-}
+        .video-card video {
+            width: 100%;
+            max-height: 520px;
+            background: #111111;
+            border-radius: 8px;
+        }
 
-input,
-textarea {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #cbd5cc;
-    border-radius: 8px;
-    font-size: 16px;
-}
+        .share-button {
+            background: var(--yellow);
+            color: #202820;
+            font-size: 20px;
+            border-radius: 50%;
+            width: 46px;
+            height: 46px;
+        }
 
-button,
-.button {
-    display: inline-block;
-    padding: 11px 17px;
-    background: var(--green);
-    color: white;
-    border: 0;
-    border-radius: 8px;
-    cursor: pointer;
-    text-decoration: none;
-    font-weight: bold;
-}
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
 
-button:hover,
-.button:hover {
-    background: var(--darkgreen);
-}
+        .error {
+            color: #b00020;
+        }
 
-.yellow {
-    background: var(--yellow);
-    color: #17231b;
-}
+        @media (max-width: 600px) {
+            main {
+                margin-top: 12px;
+            }
 
-.muted {
-    color: #66736a;
-    font-size: 14px;
-}
-
-video {
-    width: 100%;
-    max-height: 520px;
-    background: #111;
-    border-radius: 10px;
-}
-
-.balance {
-    font-size: 30px;
-    font-weight: bold;
-    color: var(--green);
-}
-
-footer {
-    text-align: center;
-    padding: 25px;
-    color: #68746b;
-}
-
-.stat {
-    display: inline-block;
-    padding: 12px;
-    margin: 5px;
-    background: #f0f7ee;
-    border-radius: 9px;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th,
-td {
-    padding: 9px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
-</style>
-</head>
-
-<body>
-<header>
-    <div class="brand">GO<span>&</span>GO</div>
-    <div>Connect • Create • Discover</div>
-</header>
-
-${nav}
-
-<main>${content}</main>
-
-<footer>
-    © ${new Date().getFullYear()} GO&GO — Connect the world.
-</footer>
-
-<script>
-async function shareVideo(button) {
-    const path = button.dataset.path;
-    const title =
-        button.dataset.title || 'Reba iyi video kuri GO&GO';
-
-    const url = new URL(
-        path,
-        window.location.origin
-    ).href;
-
-    if (navigator.share) {
-        try {
-            await navigator.share({
-                title: 'GO&GO',
-                text: title,
-                url: url
-            });
-
-            return;
-        } catch (error) {
-            if (error && error.name === 'AbortError') {
-                return;
+            nav {
+                gap: 9px;
             }
         }
-    }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">GO<span>&</span>GO</div>
+        <div>Share your world.</div>
+    </header>
 
-    try {
-        await navigator.clipboard.writeText(url);
+    ${nav}
 
-        alert(
-            'Link yakoporowe neza! Ushobora kuyisangiza inshuti.'
-        );
-    } catch (error) {
-        window.prompt(
-            'Koporora link ya video:',
-            url
-        );
-    }
-}
-</script>
+    <main>
+        ${content}
+    </main>
 
+    <script>
+        async function sharePost(url, title) {
+            const fullUrl = new URL(url, window.location.origin).href;
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: title || 'GO&GO',
+                        url: fullUrl
+                    });
+                    return;
+                } catch (error) {
+                    if (error.name === 'AbortError') return;
+                }
+            }
+
+            try {
+                await navigator.clipboard.writeText(fullUrl);
+                alert('Link yakoporowe!');
+            } catch (error) {
+                window.prompt('Kopiya iyi link:', fullUrl);
+            }
+        }
+    </script>
 </body>
-</html>`;
-}
+</html>
+    `;
+ /* =========================================
+   GO&GO — IGICE CYA 3/5
+   REGISTER, LOGIN, HOME, SEARCH, UPLOAD
+========================================= */
 
-function renderPage(res, title, content, req, status = 200) {
-    res.status(status).send(page(title, content, req));
-}
-
-/* HOME / VIDEO FEED */
+/* HOME */
 
 app.get('/', (req, res) => {
-    const user = req.session.userId
-        ? q.userById.get(req.session.userId)
-        : null;
-
     const videos = q.videos.all();
-
-    const feed = videos.map(video => `
-        <article class="card post-card">
-
-            <button
-                type="button"
-                class="share-icon"
-                aria-label="Share this video"
-                title="Share"
-                data-path="/videos/${video.id}"
-                data-title="${escapeHtml(video.title)}"
-                onclick="shareVideo(this)">↗</button>
-
-            <h3>${escapeHtml(video.title)}</h3>
-
-            <p class="muted">
-                By
-                <a href="/u/${encodeURIComponent(video.username)}">
-                    @${escapeHtml(video.username)}
-                </a>
-            </p>
-
-            <video
-                controls
-                preload="metadata"
-                src="${escapeHtml(video.video_url)}">
-            </video>
-
-            <p>❤️ ${video.likes} likes</p>
-
-            ${user ? `
-                <form method="post"
-                    action="/videos/${video.id}/like">
-
-                    <input type="hidden" name="_token"
-                        value="${escapeHtml(resToken(req))}">
-
-                    <button type="submit" class="yellow">
-                        Like / Unlike
-                    </button>
-                </form>
-
-                <p>
-                    <a href="/videos/${video.id}">
-                        View comments
-                    </a>
-                </p>
-            ` : `
-                <a href="/login">
-                    Login to like and comment
-                </a>
-            `}
-        </article>
-    `).join('');
 
     const content = `
         <section class="card">
-            <h1>Welcome to GO&GO 💚💛</h1>
-
-            <p>
-                A place to share videos, meet people and discover creators.
-            </p>
-
-            ${user ? `
-                <p>
-                    Murakaza neza,
-                    <b>@${escapeHtml(user.username)}</b>!
-                </p>
-
-                <p class="balance">
-                    ${Number(user.balance).toFixed(2)} ${CURRENCY}
-                </p>
-
-                <a class="button" href="/upload">
-                    Share a video
-                </a>
-            ` : `
-                <a class="button" href="/register">
-                    Join GO&GO
-                </a>
-
-                <a class="button yellow" href="/login">
-                    Login
-                </a>
-            `}
+            <h1>Murakaza neza kuri GO&GO 💚💛</h1>
+            <p>Sangira ibitekerezo, amafoto na video n'inshuti zawe.</p>
+            ${req.session.userId
+                ? '<a class="button" href="/upload">Shyiraho post</a>'
+                : '<a class="button" href="/register">Fungura konti</a>'}
         </section>
 
-        <h2>Video Feed</h2>
+        <h2>Posts nshya</h2>
 
-        ${feed || `
-            <div class="card">
-                Nta video irashyirwaho.
-                Ba uwa mbere uyishyireho!
-            </div>
+        ${videos.length ? videos.map(video => `
+            <article class="card video-card">
+                <h3>${escapeHtml(video.username)}</h3>
+                <p>${escapeHtml(video.title)}</p>
+
+                <video controls preload="metadata"
+                    src="${escapeHtml(video.video_url)}"></video>
+
+                <div class="actions">
+                    <span>❤️ ${Number(video.likes) || 0}</span>
+
+                    ${req.session.userId ? `
+                        <form class="inline" method="post"
+                              action="/like/${video.id}">
+                            <input type="hidden" name="_token"
+                                   value="${escapeHtml(resToken(req))}">
+                            <button type="submit">❤️ Like</button>
+                        </form>
+                    ` : ''}
+
+                    <button class="share-button" type="button"
+                        aria-label="Share post"
+                        onclick="sharePost('/post/${video.id}',
+                        '${escapeHtml(video.title).replace(/'/g, '&#39;')}')">
+                        ↗
+                    </button>
+                </div>
+
+                <p class="muted">
+                    ${escapeHtml(video.created_at || '')}
+                </p>
+            </article>
+        `).join('') : `
+            <section class="card">
+                Nta post irashyirwaho. Ba uwa mbere!
+            </section>
         `}
     `;
 
-    renderPage(res, 'Home', content, req);
+    res.send(page('Home', content, req));
 });
 
-/* REGISTRATION FORM */
+/* REGISTER PAGE */
 
 app.get('/register', (req, res) => {
     const content = `
         <section class="card">
-            <h1>Create account</h1>
+            <h1>Fungura konti ya GO&GO</h1>
 
             <form method="post" action="/register">
                 <input type="hidden" name="_token"
                     value="${escapeHtml(resToken(req))}">
 
                 <label>Username</label>
-                <input
-                    name="username"
-                    required
-                    minlength="3"
-                    maxlength="24"
-                    pattern="[A-Za-z0-9_]+"
-                    autocomplete="username">
+                <input name="username" required minlength="3"
+                    maxlength="24" autocomplete="username"
+                    placeholder="Andika username">
 
                 <label>Email</label>
-                <input
-                    type="email"
-                    name="email"
-                    required
-                    maxlength="254"
-                    autocomplete="email">
+                <input name="email" type="email" required
+                    maxlength="254" autocomplete="email"
+                    placeholder="Andika email">
 
                 <label>Password</label>
-                <input
-                    type="password"
-                    name="password"
-                    required
-                    minlength="10"
-                    autocomplete="new-password">
+                <input name="password" type="password" required
+                    minlength="8" maxlength="128"
+                    autocomplete="new-password"
+                    placeholder="Nibura inyuguti 8">
 
-                <label>Referral code (optional)</label>
-                <input name="referral" maxlength="30">
-
-                <p class="muted">
-                    Koresha password ikomeye kandi ntuyisangize abandi.
-                </p>
+                <label>Referral code (si ngombwa)</label>
+                <input name="referral" maxlength="40"
+                    placeholder="Referral code">
 
                 <button type="submit">Create account</button>
             </form>
+
+            <p>Usanzwe ufite konti?
+                <a href="/login">Injira hano</a>
+            </p>
         </section>
     `;
 
-    renderPage(res, 'Register', content, req);
+    res.send(page('Register', content, req));
 });
 
-/* REGISTER ACCOUNT */
+/* REGISTER ACTION */
 
 app.post('/register', checkToken, async (req, res) => {
-    const username = String(req.body.username || '').trim();
-    const email = String(req.body.email || '').trim().toLowerCase();
-    const password = String(req.body.password || '');
-    const referral = String(req.body.referral || '')
-        .trim()
-        .toUpperCase();
-
-    if (!validUsername(username)) {
-        return res.status(400).send(
-            'Username igomba kuba inyuguti, imibare cyangwa _, kuva kuri 3 kugeza kuri 24.'
-        );
-    }
-
-    if (
-        email.length > 254 ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    ) {
-        return res.status(400).send('Email ntabwo yemewe.');
-    }
-
-    if (password.length < 10 || password.length > 200) {
-        return res.status(400).send(
-            'Password igomba kuba nibura inyuguti 10.'
-        );
-    }
-
-    if (
-        q.userByEmail.get(email) ||
-        q.userByUsername.get(username)
-    ) {
-        return res.status(409).send(
-            'Email cyangwa username isanzwe ikoreshwa.'
-        );
-    }
-
-    let referrer = null;
-
-    if (referral) {
-        const found = q.userByReferral.get(referral);
-        if (found) referrer = found.id;
-    }
-
     try {
+        const username = String(req.body.username || '').trim();
+        const email = String(req.body.email || '')
+            .trim().toLowerCase();
+        const password = String(req.body.password || '');
+        const referral = String(req.body.referral || '').trim();
+
+        if (!validUsername(username)) {
+            return res.status(400).send(
+                page('Error', `
+                    <section class="card">
+                        <h2 class="error">Username si yo!</h2>
+                        <p>Koresha inyuguti, imibare na _ gusa,
+                        hagati ya 3 na 24.</p>
+                        <a href="/register">Subira inyuma</a>
+                    </section>
+                `, req)
+            );
+        }
+
+        if (
+            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+            email.length > 254
+        ) {
+            return res.status(400).send(
+                page('Error', `
+                    <section class="card">
+                        <h2 class="error">Email si yo.</h2>
+                        <a href="/register">Subira inyuma</a>
+                    </section>
+                `, req)
+            );
+        }
+
+        if (password.length < 8 || password.length > 128) {
+            return res.status(400).send(
+                page('Error', `
+                    <section class="card">
+                        <h2 class="error">Password ntiyujuje ibisabwa.</h2>
+                        <p>Igomba kugira inyuguti nibura 8.</p>
+                        <a href="/register">Subira inyuma</a>
+                    </section>
+                `, req)
+            );
+        }
+
+        if (
+            q.userByEmail.get(email) ||
+            q.userByUsername.get(username)
+        ) {
+            return res.status(409).send(
+                page('Error', `
+                    <section class="card">
+                        <h2 class="error">Konti irahari.</h2>
+                        <p>Gerageza indi email cyangwa username.</p>
+                        <a href="/register">Subira inyuma</a>
+                    </section>
+                `, req)
+            );
+        }
+
+        let referredBy = null;
+
+        if (referral) {
+            const referrer = q.userByReferral.get(referral);
+
+            if (referrer) {
+                referredBy = referrer.id;
+            }
+        }
+
         const passwordHash = await bcrypt.hash(password, 12);
+        const referralCode = newReferralCode();
 
         const result = q.createUser.run(
             username,
             email,
             passwordHash,
-            newReferralCode(),
-            referrer
+            referralCode,
+            referredBy
         );
 
-        const userId = Number(result.lastInsertRowid);
+        const newUserId = Number(result.lastInsertRowid);
 
-        if (referrer) {
+        if (referredBy) {
             db.prepare(`
                 INSERT OR IGNORE INTO referrals
                 (referrer_id, referred_id)
                 VALUES (?, ?)
-            `).run(referrer, userId);
+            `).run(referredBy, newUserId);
         }
 
-        req.session.regenerate(err => {
-            if (err) {
+        req.session.regenerate(error => {
+            if (error) {
+                console.error('Session error:', error.message);
                 return res.status(500).send(
-                    'Byanze. Ongera ugerageze.'
+                    'Konti yako yarakozwe, ariko kwinjira byanze. Gerageza login.'
                 );
             }
 
-            req.session.userId = userId;
+            req.session.userId = newUserId;
             req.session.formToken =
-                crypto.randomBytes(24).toString('hex');
+                crypto.randomBytes(32).toString('hex');
 
-            res.redirect('/');
+            req.session.save(saveError => {
+                if (saveError) {
+                    console.error('Session save error:',
+                        saveError.message);
+                    return res.redirect('/login');
+                }
+
+                res.redirect('/');
+            });
         });
     } catch (error) {
-        console.error('Register error:', error.message);
+        console.error('Registration error:', error.message);
+
+        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+            return res.status(409).send(
+                'Email cyangwa username isanzwe ikoreshwa.'
+            );
+        }
 
         res.status(500).send(
-            'Konti ntiyakozwe. Ongera ugerageze.'
+            'Habaye ikibazo mu gukora konti. Ongera ugerageze.'
         );
     }
 });
 
-/* LOGIN FORM */
+/* LOGIN PAGE */
 
 app.get('/login', (req, res) => {
     const content = `
         <section class="card">
-            <h1>Login to GO&GO</h1>
+            <h1>Injira muri GO&GO</h1>
 
             <form method="post" action="/login">
                 <input type="hidden" name="_token"
                     value="${escapeHtml(resToken(req))}">
 
                 <label>Email</label>
-                <input
-                    type="email"
-                    name="email"
-                    required
+                <input name="email" type="email" required
                     autocomplete="email">
 
                 <label>Password</label>
-                <input
-                    type="password"
-                    name="password"
-                    required
+                <input name="password" type="password" required
                     autocomplete="current-password">
 
                 <button type="submit">Login</button>
             </form>
+
+            <p>Nta konti ufite?
+                <a href="/register">Iyandikishe</a>
+            </p>
         </section>
     `;
 
-    renderPage(res, 'Login', content, req);
+    res.send(page('Login', content, req));
 });
 
-/* LOGIN */
+/* LOGIN ACTION */
 
 app.post('/login', checkToken, async (req, res) => {
-    const email = String(req.body.email || '')
-        .trim()
-        .toLowerCase();
+    try {
+        const email = String(req.body.email || '')
+            .trim().toLowerCase();
+        const password = String(req.body.password || '');
 
-    const password = String(req.body.password || '');
+        const user = q.userByEmail.get(email);
 
-    const user = q.userByEmail.get(email);
-
-    if (
-        !user ||
-        !(await bcrypt.compare(password, user.password_hash))
-    ) {
-        return res.status(401).send(
-            'Email cyangwa password si byo.'
-        );
-    }
-
-    req.session.regenerate(err => {
-        if (err) {
-            return res.status(500).send(
-                'Login yanze. Ongera ugerageze.'
+        if (
+            !user ||
+            !(await bcrypt.compare(password, user.password_hash))
+        ) {
+            return res.status(401).send(
+                page('Login', `
+                    <section class="card">
+                        <h2 class="error">
+                            Email cyangwa password si byo.
+                        </h2>
+                        <a href="/login">Ongera ugerageze</a>
+                    </section>
+                `, req)
             );
         }
 
-        req.session.userId = user.id;
-        req.session.formToken =
-            crypto.randomBytes(24).toString('hex');
+        req.session.regenerate(error => {
+            if (error) {
+                console.error('Login session error:',
+                    error.message);
+                return res.status(500).send('Login yanze.');
+            }
 
-        res.redirect('/');
-    });
+            req.session.userId = user.id;
+            req.session.formToken =
+                crypto.randomBytes(32).toString('hex');
+
+            req.session.save(saveError => {
+                if (saveError) {
+                    console.error('Login save error:',
+                        saveError.message);
+                    return res.status(500).send(
+                        'Login yanze. Ongera ugerageze.'
+                    );
+                }
+
+                res.redirect('/');
+            });
+        });
+    } catch (error) {
+        console.error('Login error:', error.message);
+        res.status(500).send('Habaye ikibazo mu kwinjira.');
+    }
 });
 
 /* LOGOUT */
 
 app.post('/logout', checkToken, requireLogin, (req, res) => {
-    req.session.destroy(() => res.redirect('/'));
+    req.session.destroy(error => {
+        if (error) {
+            console.error('Logout error:', error.message);
+            return res.status(500).send('Logout yanze.');
+        }
+
+        res.clearCookie('gogo.sid');
+        res.redirect('/');
+    });
 });
 
-/* VIDEO UPLOAD FORM */
+/* UPLOAD PAGE */
 
 app.get('/upload', requireLogin, (req, res) => {
     const content = `
         <section class="card">
-            <h1>Share a video</h1>
+            <h1>Shyiraho video</h1>
 
             <p>
-                Shyiramo URL ya video iri kuri hosting yizewe.
-                Video igomba kuba iyawe cyangwa ufite uburenganzira
-                bwo kuyisangiza abandi.
+                Andika umutwe wa video, hanyuma ushyiremo
+                URL ya video iboneka kuri internet.
             </p>
 
             <form method="post" action="/upload">
                 <input type="hidden" name="_token"
                     value="${escapeHtml(resToken(req))}">
 
-                <label>Video title</label>
-                <input name="title" maxlength="120" required>
+                <label>Umutwe wa post</label>
+                <input name="title" required maxlength="200">
 
-                <label>Video URL (HTTPS)</label>
-                <input
-                    name="video_url"
-                    type="url"
-                    required
-                    maxlength="1000"
+                <label>Video URL</label>
+                <input name="video_url" type="url" required
+                    maxlength="2000"
                     placeholder="https://example.com/video.mp4">
 
-                <button type="submit">Publish video</button>
+                <button type="submit">Publish</button>
             </form>
         </section>
     `;
 
-    renderPage(res, 'Upload', content, req);
+    res.send(page('Upload', content, req));
 });
 
-/* PUBLISH VIDEO */
+/* UPLOAD ACTION */
 
 app.post('/upload', requireLogin, checkToken, (req, res) => {
-    const title = String(req.body.title || '').trim();
-    const videoUrl = String(req.body.video_url || '').trim();
-
-    if (!title || title.length > 120) {
-        return res.status(400).send('Title ntabwo yemewe.');
-    }
-
-    let parsed;
-
     try {
-        parsed = new URL(videoUrl);
-    } catch {
-        return res.status(400).send('Video URL ntabwo yemewe.');
+        const title = String(req.body.title || '').trim();
+        const videoUrl = String(req.body.video_url || '').trim();
+
+        if (!title || title.length > 200) {
+            return res.status(400).send(
+                'Umutwe wa post ugomba kuba hagati y’inyuguti 1 na 200.'
+            );
+        }
+
+        if (
+            !/^https?:\/\/\S+$/i.test(videoUrl) ||
+            videoUrl.length > 2000
+        ) {
+            return res.status(400).send(
+                'Video URL si yo.'
+            );
+        }
+
+        q.createVideo.run(req.user.id, title, videoUrl);
+
+        res.redirect('/');
+    } catch (error) {
+        console.error('Upload error:', error.message);
+        res.status(500).send(
+            'Video ntiyabashije gushyirwaho.'
+        );
     }
-
-    if (parsed.protocol !== 'https:') {
-        return res.status(400).send('Koresha HTTPS video URL.');
-    }
-
-    q.createVideo.run(req.user.id, title, parsed.toString());
-    res.redirect('/');
-});
-
-/* VIDEO DETAILS AND COMMENTS */
-
-app.get('/videos/:id', (req, res) => {
-    const id = Number(req.params.id);
-
-    if (!Number.isSafeInteger(id) || id < 1) {
-        return res.status(400).send('Video ID ntabwo yemewe.');
-    }
-
-    const video = db.prepare(`
-        SELECT videos.*, users.username
-        FROM videos
-        JOIN users ON users.id = videos.user_id
-        WHERE videos.id = ?
-    `).get(id);
-
-    if (!video) {
-        return res.status(404).send('Video ntiyabonetse.');
-    }
-
-    const comments = db.prepare(`
-        SELECT comments.*, users.username
-        FROM comments
-        JOIN users ON users.id = comments.user_id
-        WHERE comments.video_id = ?
-        ORDER BY comments.id DESC
-    `).all(id);
-
-    const commentHtml = comments.map(c => `
-        <div class="card">
-            <b>@${escapeHtml(c.username)}</b>
-            <p>${escapeHtml(c.comment)}</p>
-            <small>${escapeHtml(c.created_at)}</small>
-        </div>
-    `).join('');
-
-    const form = req.session.userId ? `
-        <section class="card">
-            <h3>Add a comment</h3>
-
-            <form method="post" action="/videos/${id}/comment">
-                <input type="hidden" name="_token"
-                    value="${escapeHtml(resToken(req))}">
-
-                <textarea
-                    name="comment"
-                    maxlength="1000"
-                    required></textarea>
-
-                <button type="submit">Comment</button>
-            </form>
-        </section>
-    ` : '<p><a href="/login">Login to comment</a></p>';
-
-    const content = `
-        <article class="card post-card">
-
-            <button
-                type="button"
-                class="share-icon"
-                aria-label="Share this video"
-                title="Share"
-                data-path="/videos/${video.id}"
-                data-title="${escapeHtml(video.title)}"
-                onclick="shareVideo(this)">↗</button>
-
-            <h1>${escapeHtml(video.title)}</h1>
-
-            <p>By @${escapeHtml(video.username)}</p>
-
-            <video
-                controls
-                preload="metadata"
-                src="${escapeHtml(video.video_url)}">
-            </video>
-
-            <p>❤️ ${video.likes} likes</p>
-        </article>
-
-        ${form}
-
-        <h2>Comments</h2>
-
-        ${commentHtml || '<p>No comments yet.</p>'}
-    `;
-
-    renderPage(res, 'Video', content, req);
 });
 
 /* LIKE / UNLIKE */
 
-app.post('/videos/:id/like', requireLogin, checkToken, (req, res) => {
+app.post('/like/:id', requireLogin, checkToken, (req, res) => {
     const videoId = Number(req.params.id);
 
-    if (
-        !Number.isSafeInteger(videoId) ||
-        videoId < 1 ||
-        !q.videoById.get(videoId)
-    ) {
-        return res.status(404).send('Video ntiyabonetse.');
+    if (!Number.isSafeInteger(videoId) || videoId < 1) {
+        return res.status(400).send('Post ntiyabonetse.');
     }
 
-    if (q.hasLiked.get(req.user.id, videoId)) {
-        q.deleteLike.run(req.user.id, videoId);
-    } else {
-        q.createLike.run(req.user.id, videoId);
+    const video = q.videoById.get(videoId);
+
+    if (!video) {
+        return res.status(404).send('Post ntiyabonetse.');
     }
 
-    q.updateLikes.run(videoId, videoId);
+    try {
+        const existing = q.hasLiked.get(req.user.id, videoId);
 
-    res.redirect('/');
+        if (existing) {
+            q.deleteLike.run(req.user.id, videoId);
+        } else {
+            q.createLike.run(req.user.id, videoId);
+        }
+
+        q.updateLikes.run(videoId, videoId);
+
+        res.redirect('/');
+    } catch (error) {
+        console.error('Like error:', error.message);
+        res.status(500).send('Like yanze. Ongera ugerageze.');
+    }
 });
 
-/* ADD COMMENT */
+/* SEARCH PAGE */
 
-app.post(
-    '/videos/:id/comment',
-    requireLogin,
-    checkToken,
-    (req, res) => {
-        const videoId = Number(req.params.id);
-        const comment = String(req.body.comment || '').trim();
+app.get('/search', requireLogin, (req, res) => {
+    const term = String(req.query.q || '').trim().slice(0, 60);
 
-        if (
-            !Number.isSafeInteger(videoId) ||
-            videoId < 1 ||
-            !q.videoById.get(videoId)
-        ) {
-            return res.status(404).send('Video ntiyabonetse.');
-        }
+    let users = [];
 
-        if (!comment || comment.length > 1000) {
-            return res.status(400).send(
-                'Comment ntabwo yemewe.'
-            );
-        }
-
-        db.prepare(`
-            INSERT INTO comments (user_id, video_id, comment)
-            VALUES (?, ?, ?)
-        `).run(req.user.id, videoId, comment);
-
-        res.redirect(`/videos/${videoId}`);
-    }
-);
-
-/* SEARCH USERS */
-
-app.get('/search', (req, res) => {
-    const search = String(req.query.q || '')
-        .trim()
-        .slice(0, 40);
-
-    let results = [];
-
-    if (search) {
-        const escaped = search.replace(/[\\%_]/g, '\\$&');
-
-        results = db.prepare(`
+    if (term) {
+        users = db.prepare(`
             SELECT id, username
             FROM users
-            WHERE username LIKE ? ESCAPE '\\'
+            WHERE username LIKE ?
             ORDER BY username
-            LIMIT 50
-        `).all('%' + escaped + '%');
+            LIMIT 30
+        `).all('%' + term.replace(/[%_]/g, '') + '%');
     }
-
-    const rows = results.map(u => `
-        <div class="card">
-            <a href="/u/${encodeURIComponent(u.username)}">
-                @${escapeHtml(u.username)}
-            </a>
-        </div>
-    `).join('');
 
     const content = `
         <section class="card">
-            <h1>Find people</h1>
+            <h1>Shaka abantu</h1>
 
             <form method="get" action="/search">
-                <input
-                    name="q"
-                    value="${escapeHtml(search)}"
-                    placeholder="Search username">
-
+                <input name="q" maxlength="60"
+                    value="${escapeHtml(term)}"
+                    placeholder="Shaka username">
                 <button type="submit">Search</button>
             </form>
         </section>
 
-        ${rows || (search ? '<p>No users found.</p>' : '')}
+        ${users.map(user => `
+            <section class="card">
+                <strong>${escapeHtml(user.username)}</strong>
+                <a class="button" href="/profile/${user.id}">
+                    Reba profile
+                </a>
+            </section>
+        `).join('')}
     `;
 
-    renderPage(res, 'Search', content, req);
+    res.send(page('Search', content, req));
 });
+        }
+/* =========================================
+   GO&GO — IGICE CYA 5/5
+   ADMIN, ERRORS AND SERVER STARTUP
+========================================= */
 
-/* USER PROFILE */
+/* ADMIN DASHBOARD */
 
-app.get('/u/:username', (req, res) => {
-    const username = String(req.params.username || '');
-    const user = q.userByUsername.get(username);
+app.get('/admin', requireLogin, requireAdmin, (req, res) => {
+    const totalUsers = db.prepare(`
+        SELECT COUNT(*) AS total FROM users
+    `).get().total;
 
-    if (!user) {
-        return res.status(404).send('User ntiyabonetse.');
-    }
+    const totalPosts = db.prepare(`
+        SELECT COUNT(*) AS total FROM videos
+    `).get().total;
 
-    const followers = q.followerCount.get(user.id).total;
-    const following = q.followingCount.get(user.id).total;
-    const isSelf = req.session.userId === user.id;
+    const totalComments = db.prepare(`
+        SELECT COUNT(*) AS total FROM comments
+    `).get().total;
 
-    const isFollowing = req.session.userId
-        ? Boolean(db.prepare(`
-            SELECT 1 FROM follows
-            WHERE follower_id = ? AND following_id = ?
-        `).get(req.session.userId, user.id))
-        : false;
+    const totalFollows = db.prepare(`
+        SELECT COUNT(*) AS total FROM follows
+    `).get().total;
 
-    const followForm = req.session.userId && !isSelf ? `
-        <form method="post"
-            action="/u/${encodeURIComponent(user.username)}/follow">
-
-            <input type="hidden" name="_token"
-                value="${escapeHtml(resToken(req))}">
-
-            <button class="yellow">
-                ${isFollowing ? 'Unfollow' : 'Follow'}
-            </button>
-        </form>
-    ` : '';
-
-    const videos = db.prepare(`
-        SELECT * FROM videos
-        WHERE user_id = ?
+    const users = db.prepare(`
+        SELECT id, username, email, balance, is_admin, created_at
+        FROM users
         ORDER BY id DESC
-    `).all(user.id);
-
-    const videoHtml = videos.map(v => `
-        <div class="card">
-            <h3>${escapeHtml(v.title)}</h3>
-
-            <video
-                controls
-                preload="metadata"
-                src="${escapeHtml(v.video_url)}">
-            </video>
-
-            <p>❤️ ${v.likes}</p>
-
-            <a href="/videos/${v.id}">Comments</a>
-        </div>
-    `).join('');
+        LIMIT 100
+    `).all();
 
     const content = `
         <section class="card">
-            <h1>@${escapeHtml(user.username)}</h1>
+            <h1>👑 GO&GO Admin Dashboard</h1>
 
-            <div class="stat">Followers: ${followers}</div>
-            <div class="stat">Following: ${following}
-
-            </div>
-
-            ${followForm}
-        </section>
-
-        <h2>Videos</h2>
-
-        ${videoHtml || '<p>This creator has not posted videos yet.</p>'}
-    `;
-
-    renderPage(res, 'Profile', content, req);
-});
-
-/* FOLLOW / UNFOLLOW */
-
-app.post(
-    '/u/:username/follow',
-    requireLogin,
-    checkToken,
-    (req, res) => {
-        const user = q.userByUsername.get(
-            String(req.params.username || '')
-        );
-
-        if (!user) {
-            return res.status(404).send('User ntiyabonetse.');
-        }
-
-        if (user.id === req.user.id) {
-            return res.status(400).send(
-                'Ntushobora kwifollowinga.'
-            );
-        }
-
-        const existing = db.prepare(`
-            SELECT 1 FROM follows
-            WHERE follower_id = ? AND following_id = ?
-        `).get(req.user.id, user.id);
-
-        if (existing) {
-            q.unfollow.run(req.user.id, user.id);
-        } else {
-            q.follow.run(req.user.id, user.id);
-        }
-
-        res.redirect(`/u/${encodeURIComponent(user.username)}`);
-    }
-);
-
-/* WALLET */
-
-app.get('/wallet', requireLogin, (req, res) => {
-    const transactions = q.transactions.all(req.user.id);
-
-    const rows = transactions.map(t => `
-        <tr>
-            <td>${escapeHtml(t.type)}</td>
-            <td>${Number(t.amount).toFixed(2)} ${CURRENCY}</td>
-            <td>${escapeHtml(t.description)}</td>
-            <td>${escapeHtml(t.created_at)}</td>
-        </tr>
-    `).join('');
-
-    const content = `
-        <section class="card">
-            <h1>GO CASH Wallet</h1>
-
-            <p class="balance">
-                ${Number(req.user.balance).toFixed(2)} ${CURRENCY}
-            </p>
-
-            <p>
-                GOC ni amafaranga yo muri platform y'igerageza.
-                Ntabwo ari amafaranga nyayo kugeza igihe uburyo
-                bwo kuyishyura bwemejwe.
-            </p>
-
-            <p class="muted">
-                Kubikuza ntibirafungurwa muri iyi version.
-            </p>
+            <p>Total users: <strong>${Number(totalUsers)}</strong></p>
+            <p>Total posts: <strong>${Number(totalPosts)}</strong></p>
+            <p>Total comments: <strong>${Number(totalComments)}</strong></p>
+            <p>Total follows: <strong>${Number(totalFollows)}</strong></p>
         </section>
 
         <section class="card">
-            <h2>Transaction history</h2>
+            <h2>Abakoresha baheruka kwiyandikisha</h2>
 
             <div style="overflow-x:auto">
-                <table>
-                    <tr>
-                        <th>Type</th>
-                        <th>Amount</th>
-                        <th>Description</th>
-                        <th>Date</th>
-                    </tr>
+                <table border="1" cellpadding="8"
+                    cellspacing="0" width="100%">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Balance</th>
+                            <th>Admin</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
 
-                    ${rows}
+                    <tbody>
+                        ${users.map(user => `
+                            <tr>
+                                <td>${Number(user.id)}</td>
+                                <td>${escapeHtml(user.username)}</td>
+                                <td>${escapeHtml(user.email)}</td>
+                                <td>${Number(user.balance || 0)}</td>
+                                <td>${user.is_admin ? 'Yes' : 'No'}</td>
+                                <td>${escapeHtml(user.created_at || '')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
                 </table>
             </div>
         </section>
     `;
 
-    renderPage(res, 'Wallet', content, req);
+    res.send(page('Admin', content, req));
 });
 
-/* REFERRALS */
+/* ADMIN: VIEW POSTS */
 
-app.get('/referrals', requireLogin, (req, res) => {
-    const referrals = db.prepare(`
-        SELECT users.username, referrals.created_at
-        FROM referrals
-        JOIN users ON users.id = referrals.referred_id
-        WHERE referrals.referrer_id = ?
-        ORDER BY referrals.id DESC
-    `).all(req.user.id);
+app.get(
+    '/admin/posts',
+    requireLogin,
+    requireAdmin,
+    (req, res) => {
+        const videos = q.videos.all();
 
-    const rows = referrals.map(r => `
-        <div class="card">
-            @${escapeHtml(r.username)}
-            <p class="muted">${escapeHtml(r.created_at)}</p>
-        </div>
-    `).join('');
+        const content = `
+            <section class="card">
+                <h1>Manage Posts</h1>
 
-    const content = `
-        <section class="card">
-            <h1>Invite friends</h1>
+                ${videos.map(video => `
+                    <div class="card">
+                        <h3>${escapeHtml(video.title)}</h3>
+                        <p>
+                            By ${escapeHtml(video.username)}
+                        </p>
+                        <a href="/post/${video.id}">
+                            View post
+                        </a>
+                    </div>
+                `).join('')}
+            </section>
+        `;
 
-            <p>Your referral code:</p>
+        res.send(page('Manage Posts', content, req));
+    }
+);
 
-            <h2>${escapeHtml(req.user.referral_code)}</h2>
-
-            <p>
-                Abantu biyandikisha bakoresheje iyi code
-                bazagaragara mu mateka ya referrals yawe.
-            </p>
-
-            <p class="muted">
-                Nta reward y'amafaranga ihita itangwa muri iyi version.
-            </p>
-        </section>
-
-        <h2>Your referrals</h2>
-
-        ${rows || '<p>You have no referrals yet.</p>'}
-    `;
-
-    renderPage(res, 'Referrals', content, req);
-});
-
-/* ADMIN DASHBOARD */
-
-app.get('/admin', requireLogin, requireAdmin, (req, res) => {
-    const userCount = db.prepare(
-        'SELECT COUNT(*) AS n FROM users'
-    ).get().n;
-
-    const videoCount = db.prepare(
-        'SELECT COUNT(*) AS n FROM videos'
-    ).get().n;
-
-    const commentCount = db.prepare(
-        'SELECT COUNT(*) AS n FROM comments'
-    ).get().n;
-
-    const content = `
-        <section class="card">
-            <h1>GO&GO Admin Dashboard</h1>
-
-            <div class="stat">Users: ${userCount}</div>
-            <div class="stat">Videos: ${videoCount}</div>
-            <div class="stat">Comments: ${commentCount}</div>
-
-            <p>
-                Admin dashboard y'ibanze. Ibikorwa byo guhindura
-                balances, kwemeza withdrawals no gucunga adverts
-                bigomba kubakwa byihariye kandi bigasuzumwa neza.
-            </p>
-        </section>
-    `;
-
-    renderPage(res, 'Admin', content, req);
-});
-
-/* HEALTH CHECK */
-
-app.get('/health', (req, res) => {
-    res.json({
-        app: APP_NAME,
-        status: 'ok',
-        timestamp: new Date().toISOString()
-    });
-});
-
-/* 404 */
+/* 404 PAGE */
 
 app.use((req, res) => {
-    res.status(404).send(page(
-        'Not found',
-        '<section class="card"><h1>404</h1><p>Page ntiyabonetse.</p><a class="button" href="/">Back home</a></section>',
-        req
-    ));
+    res.status(404).send(
+        page('Page Not Found', `
+            <section class="card">
+                <h1>404 — Page ntiyabonetse</h1>
+                <p>Iyo paji ntiboneka kuri GO&GO.</p>
+                <a class="button" href="/">Subira kuri Home</a>
+            </section>
+        `, req)
+    );
 });
 
-/* ERROR HANDLER */
+/* GLOBAL ERROR HANDLER */
 
 app.use((err, req, res, next) => {
-    console.error('Server error:', err.message);
+    console.error('GO&GO application error:', err);
 
     if (res.headersSent) {
         return next(err);
     }
 
     res.status(500).send(
-        'Habaye ikibazo kuri server. Ongera ugerageze nyuma.'
+        page('Server Error', `
+            <section class="card">
+                <h1>Habaye ikibazo</h1>
+                <p>Ongera ugerageze nyuma y'akanya.</p>
+                <a class="button" href="/">Subira kuri Home</a>
+            </section>
+        `, req)
     );
 });
 
-/* START SERVER */
+/* SERVER STARTUP */
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`${APP_NAME} running on port ${PORT}`);
+    console.log('===================================');
+    console.log('GO&GO server started successfully');
+    console.log('Port:', PORT);
+    console.log('Environment:', process.env.NODE_ENV || 'development');
+    console.log('===================================');
 });
 
-function shutdown() {
+/* GRACEFUL SHUTDOWN */
+
+function shutdown(signal) {
+    console.log(`${signal} received. Closing GO&GO...`);
+
     server.close(() => {
         try {
             db.close();
-        } finally {
+            console.log('Database closed.');
             process.exit(0);
+        } catch (error) {
+            console.error('Shutdown error:', error.message);
+            process.exit(1);
         }
     });
+
+    setTimeout(() => {
+        console.error('Shutdown timed out.');
+        process.exit(1);
+    }, 10000).unref();
 }
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
